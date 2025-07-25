@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Simplificado - APIs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #45a049; }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        textarea {
+            width: 100%;
+            height: 80px;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #log {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Test Simplificado de APIs</h1>
+        <p>Diagnóstico paso a paso de las funcionalidades</p>
+    </div>
+
+    <div class="container">
+        <h2>📝 Configuración</h2>
+        <textarea id="texto-prueba" placeholder="Escribe el texto a probar...">Hola doctor, me siento mal y necesito ayuda médica.</textarea>
+        
+        <div>
+            <label for="idioma-select">Idioma:</label>
+            <select id="idioma-select">
+                <option value="español">🇪🇸 Español</option>
+                <option value="aimara">🏔️ Aimara</option>
+                <option value="quechua">🦙 Quechua</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🌐 Test de Traducción</h2>
+        <button onclick="testTraduccion()">Probar Traducción</button>
+        <button onclick="testTTSNavegador()">Probar TTS Navegador</button>
+        <button onclick="pararTodo()">⏹️ Parar Todo</button>
+        
+        <div id="status-traduccion" class="status info" style="display: none;"></div>
+    </div>
+
+    <div class="container">
+        <h2>📋 Log de Actividad</h2>
+        <button onclick="limpiarLog()">🗑️ Limpiar Log</button>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let synth = window.speechSynthesis;
+        let utteranceActual = null;
+
+        function log(mensaje) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `<div><strong>[${timestamp}]</strong> ${mensaje}</div>`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(mensaje);
+        }
+
+        function mostrarStatus(mensaje, tipo = 'info') {
+            const statusElement = document.getElementById('status-traduccion');
+            statusElement.className = `status ${tipo}`;
+            statusElement.innerHTML = mensaje;
+            statusElement.style.display = 'block';
+        }
+
+        function limpiarLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        async function testTraduccion() {
+            const texto = document.getElementById('texto-prueba').value.trim();
+            const idioma = document.getElementById('idioma-select').value;
+            
+            if (!texto) {
+                alert('Por favor, escribe algún texto');
+                return;
+            }
+
+            log(`🌐 Iniciando test de traducción: "${texto}" → ${idioma}`);
+            mostrarStatus('🔄 Probando traducción...', 'info');
+
+            try {
+                // Construir URL completa
+                const baseUrl = window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '');
+                const apiUrl = baseUrl + '/api/translate.php';
+                
+                log(`📡 URL API: ${apiUrl}`);
+                
+                const requestData = {
+                    text: texto,
+                    target_language: idioma,
+                    source_language: 'es'
+                };
+                
+                log(`📤 Enviando: ${JSON.stringify(requestData)}`);
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                log(`📥 Respuesta HTTP: ${response.status} ${response.statusText}`);
+                
+                // Leer respuesta como texto primero para debug
+                const responseText = await response.text();
+                log(`📄 Respuesta raw: ${responseText.substring(0, 200)}...`);
+                
+                // Intentar parsear JSON
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (jsonError) {
+                    throw new Error(`JSON inválido: ${jsonError.message}. Respuesta: ${responseText.substring(0, 100)}`);
+                }
+                
+                if (data.success) {
+                    const traduccion = data.translated_text;
+                    log(`✅ Traducción exitosa: "${traduccion}"`);
+                    mostrarStatus(`✅ Traducido: "${traduccion}"`, 'success');
+                    
+                    // Probar TTS con la traducción
+                    await testTTSNavegadorConTexto(traduccion, idioma);
+                    
+                } else {
+                    log(`❌ Error en traducción: ${data.error}`);
+                    mostrarStatus(`❌ Error: ${data.error}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Error de red: ${error.message}`);
+                mostrarStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testTTSNavegador() {
+            const texto = document.getElementById('texto-prueba').value.trim();
+            const idioma = document.getElementById('idioma-select').value;
+            
+            if (!texto) {
+                alert('Por favor, escribe algún texto');
+                return;
+            }
+            
+            await testTTSNavegadorConTexto(texto, idioma);
+        }
+
+        async function testTTSNavegadorConTexto(texto, idioma) {
+            if (!synth) {
+                log('❌ SpeechSynthesis no disponible en este navegador');
+                return;
+            }
+
+            // Mapear idiomas
+            const codigosIdioma = {
+                'español': 'es-ES',
+                'aimara': 'es-BO',
+                'quechua': 'es-PE'
+            };
+
+            const codigoIdioma = codigosIdioma[idioma] || 'es-ES';
+            
+            log(`🔊 Iniciando TTS navegador: "${texto}" en ${codigoIdioma}`);
+            
+            try {
+                // Parar cualquier síntesis anterior
+                if (synth.speaking) {
+                    synth.cancel();
+                }
+                
+                const utterance = new SpeechSynthesisUtterance(texto);
+                utterance.lang = codigoIdioma;
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                
+                utterance.onstart = () => {
+                    log(`▶️ Reproduciendo con ${codigoIdioma}`);
+                    mostrarStatus(`🔊 Reproduciendo en ${idioma}...`, 'info');
+                };
+                
+                utterance.onend = () => {
+                    log('✅ Reproducción completada');
+                    mostrarStatus('✅ Audio completado', 'success');
+                    utteranceActual = null;
+                };
+                
+                utterance.onerror = (event) => {
+                    log(`❌ Error TTS: ${event.error}`);
+                    mostrarStatus(`❌ Error TTS: ${event.error}`, 'error');
+                    utteranceActual = null;
+                };
+                
+                utteranceActual = utterance;
+                synth.speak(utterance);
+                
+            } catch (error) {
+                log(`❌ Error en TTS navegador: ${error.message}`);
+                mostrarStatus(`❌ Error TTS: ${error.message}`, 'error');
+            }
+        }
+
+        function pararTodo() {
+            if (synth && synth.speaking) {
+                synth.cancel();
+                log('⏹️ TTS detenido');
+            }
+            
+            if (utteranceActual) {
+                utteranceActual = null;
+            }
+            
+            mostrarStatus('⏹️ Todo detenido', 'info');
+        }
+
+        // Inicialización
+        window.addEventListener('load', function() {
+            log('🚀 Test cargado');
+            
+            if (synth) {
+                log('✅ SpeechSynthesis disponible');
+                
+                // Listar voces disponibles
+                const voices = synth.getVoices();
+                if (voices.length > 0) {
+                    log(`🎤 Voces disponibles: ${voices.length}`);
+                    voices.slice(0, 3).forEach(voice => {
+                        log(`  - ${voice.name} (${voice.lang})`);
+                    });
+                } else {
+                    log('⚠️ No se detectaron voces aún');
+                    // Las voces pueden cargar asincrónicamente
+                    synth.onvoiceschanged = () => {
+                        const newVoices = synth.getVoices();
+                        log(`🎤 Voces cargadas: ${newVoices.length}`);
+                    };
+                }
+            } else {
+                log('❌ SpeechSynthesis NO disponible');
+            }
+            
+            // Test de conectividad básica
+            fetch(window.location.origin)
+                .then(response => {
+                    log(`🌐 Conectividad básica: OK (${response.status})`);
+                })
+                .catch(error => {
+                    log(`❌ Problema de conectividad: ${error.message}`);
+                });
+        });
+
+        // Test automático al hacer clic en idioma
+        document.getElementById('idioma-select').addEventListener('change', function() {
+            const idioma = this.value;
+            log(`🔄 Idioma cambiado a: ${idioma}`);
+        });
+    </script>
+</body>
+</html>
